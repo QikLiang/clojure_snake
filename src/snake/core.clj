@@ -72,6 +72,18 @@
   (draw g (drawCircle (:fruit game))
         (style :background :red)))
 
+(defn on-key-press [e]
+  (println
+    (change-dir game
+                (case (java.awt.event.KeyEvent/getKeyText
+                        (.getKeyCode e))
+                  "Left" :left
+                  "Right" :right
+                  "Up" :up
+                  "Down" :down
+                  (.getKeyCode e)
+                  ))))
+
 (defn gameGui [game]
   "create a gui for a game instance"
   (let [c (canvas :id :canvas :background "black"
@@ -79,7 +91,8 @@
                          (+ (* 2 border) gameHeight)]
                   :paint paintGame)
         f (frame :title "Snake --."
-                 :content c)]
+                 :content c
+                 :listen [:key-released on-key-press])]
     (-> f
         pack!
         show!)))
