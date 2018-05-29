@@ -1,6 +1,8 @@
 (ns snake.core
   (:gen-class)
-  (:require [clojure.tools.namespace.repl]))
+  (:require [clojure.tools.namespace.repl])
+  (:require [clojure.core.async :as a
+             :refer [>!! <! chan go]]))
 (def re clojure.tools.namespace.repl/refresh)
 (use 'seesaw.core
      'seesaw.graphics
@@ -14,14 +16,15 @@
 (def gameWidth (* gridWidth radius))
 (def gameHeight (* gridHeight radius))
 
-(defrecord Game [direction snake fruit progress])
+(defrecord Game [direction prev-dir snake fruit progress])
 (defn newFruit [game]
   (assoc game
     :fruit {:x (rand-int gridWidth)
             :y (rand-int gridHeight)}))
 (defn newGame []
   (newFruit
-    (Game. :down '({:x 1 :y 0} {:x 0 :y 0}) 0 :started)))
+    (Game. :right :right
+           '({:x 1 :y 0} {:x 0 :y 0}) 0 :started)))
 
 (defn new-head [head direction]
   (case direction
@@ -30,6 +33,16 @@
     :left (update head :x dec)
     :right (update head :x inc)))
 
+(defn game-over [game]
+  (let [head (new-head (first (:snake game))
+                       (:direction game)) ]
+    (not (and
+           (<= 0 (:x head))
+           (<= 0 (:y head))
+           (< (:x head) gridWidth)
+           (< (:y head) gridHeight)
+           (some #{head} (:snake game))))))
+
 (defn tick [game]
   "One time tick in a game"
   (let [head (new-head (first (:snake game))
@@ -37,15 +50,16 @@
         eaten (= head (:fruit game))]
     ; game over if head meets body
     (-> (assoc game :progress
-               (if (some #{head} (:snake game))
+               (if (game-over game)
                  :loss :started))
         ; put head on
         (update :snake conj head)
         ; take one off tail unless eat fruit
         (update :snake (if eaten identity drop-last))
+        ; make new fruit if old one eaten
+        ((if eaten newFruit identity))
+        (assoc :prev-dir (:direction game))
         )))
-
-(def game (newGame))
 
 (defn opp-dir [a b]
   "true if two directions are opposite"
@@ -55,7 +69,8 @@
 (defn change-dir [game direction]
   "change direction of snake if it's not 180 from current
   direction"
-  (if (opp-dir direction (:direction game))
+  (if (or (nil? direction)
+          (opp-dir direction (:prev-dir game)))
     game
     (assoc game :direction direction)))
 
@@ -63,41 +78,56 @@
   (ellipse (+ border (* radius x))
            (+ border (* radius y)) radius))
 
-(defn paintGame [c g]
+(defn paintGame [game]
+  (fn [c g]
   (draw g (rect border border gameWidth gameHeight)
         (style :foreground :white))
-  (doseq [dot (:snake game)]
+  (doseq [dot (:snake @game)]
     (draw g (drawCircle dot)
           (style :background :yellow)))
-  (draw g (drawCircle (:fruit game))
-        (style :background :red)))
+  (draw g (drawCircle (:fruit @game))
+        (style :background :red))))
 
-(defn on-key-press [e]
-  (println
-    (change-dir game
-                (case (java.awt.event.KeyEvent/getKeyText
-                        (.getKeyCode e))
-                  "Left" :left
-                  "Right" :right
-                  "Up" :up
-                  "Down" :down
-                  (.getKeyCode e)
-                  ))))
+(defn game-keys-handler [game]
+  (fn [e] (swap! game
+                 change-dir
+                   (case (java.awt.event.KeyEvent/getKeyText
+                           (.getKeyCode e))
+                     "Left" :left
+                     "Right" :right
+                     "Up" :up
+                     "Down" :down
+                     nil))))
 
 (defn gameGui [game]
   "create a gui for a game instance"
   (let [c (canvas :id :canvas :background "black"
                   :size [(+ (* 2 border) gameWidth) :by
                          (+ (* 2 border) gameHeight)]
-                  :paint paintGame)
+                  :paint (paintGame game))
         f (frame :title "Snake --."
                  :content c
-                 :listen [:key-released on-key-press])]
+                 :listen [:key-pressed
+                          (game-keys-handler game)])]
     (-> f
         pack!
-        show!)))
+        show!)
+    ; return canvas for repaint access
+    c))
 
 (defn -main
-  "I don't do a whole lot ... yet."
   [& args]
-  (gameGui game))
+  (let [game (atom (newGame))
+        c (gameGui game)
+        game-end (chan)
+        t (timer (fn [e]
+                   (swap! game tick)
+                   (repaint! c)
+                   (if (= :loss (:progress @game))
+                     (>!! game-end 0)))
+                 :delay 300)]
+    (go
+      (<! game-end)
+      (println "game ended")
+      (println @game)
+      (.stop t))))
