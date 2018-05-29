@@ -37,11 +37,13 @@
   (let [head (new-head (first (:snake game))
                        (:direction game)) ]
     (not (and
+           ; border inbound
            (<= 0 (:x head))
            (<= 0 (:y head))
            (< (:x head) gridWidth)
            (< (:y head) gridHeight)
-           (some #{head} (:snake game))))))
+           ; not running back on itself
+           (nil? (some #{head} (:snake game)))))))
 
 (defn tick [game]
   "One time tick in a game"
