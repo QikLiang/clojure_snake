@@ -2,15 +2,23 @@
   (:gen-class)
   (:require [clojure.tools.namespace.repl]))
 (def re clojure.tools.namespace.repl/refresh)
+(use 'seesaw.core
+     'seesaw.graphics
+     'seesaw.color
+     'clojure.repl)
 
-(def width 30)
-(def height 20)
+(def gridWidth 30)
+(def gridHeight 20)
 (def radius 15)
+(def border 20)
+(def gameWidth (* gridWidth radius))
+(def gameHeight (* gridHeight radius))
 
 (defrecord Game [direction snake fruit progress])
 (defn newFruit [game]
   (assoc game
-    :fruit {:x (rand-int width), :y (rand-int height)}))
+    :fruit {:x (rand-int gridWidth)
+            :y (rand-int gridHeight)}))
 (defn newGame []
   (newFruit
     (Game. :down '({:x 1 :y 0} {:x 0 :y 0}) 0 :started)))
@@ -37,7 +45,7 @@
         (update :snake (if eaten identity drop-last))
         )))
 
-(def g (newGame))
+(def game (newGame))
 
 (defn opp-dir [a b]
   "true if two directions are opposite"
@@ -51,7 +59,32 @@
     game
     (assoc game :direction direction)))
 
+(defn drawCircle [{x :x y :y}]
+  (ellipse (+ border (* radius x))
+           (+ border (* radius y)) radius))
+
+(defn paintGame [c g]
+  (draw g (rect border border gameWidth gameHeight)
+        (style :foreground :white))
+  (doseq [dot (:snake game)]
+    (draw g (drawCircle dot)
+          (style :background :yellow)))
+  (draw g (drawCircle (:fruit game))
+        (style :background :red)))
+
+(defn gameGui [game]
+  "create a gui for a game instance"
+  (let [c (canvas :id :canvas :background "black"
+                  :size [(+ (* 2 border) gameWidth) :by
+                         (+ (* 2 border) gameHeight)]
+                  :paint paintGame)
+        f (frame :title "Snake --."
+                 :content c)]
+    (-> f
+        pack!
+        show!)))
+
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (println "Hello, World!"))
+  (gameGui game))
