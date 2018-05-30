@@ -1,13 +1,16 @@
 (ns snake.core
   (:gen-class)
-  (:require [clojure.tools.namespace.repl])
   (:require [clojure.core.async :as a
              :refer [>!! <! chan go]]))
-(def re clojure.tools.namespace.repl/refresh)
 (use 'seesaw.core
-     'seesaw.graphics
-     'seesaw.color
-     'clojure.repl)
+     'seesaw.graphics)
+
+; debug mode
+(if true
+  (do
+    (use 'clojure.repl)
+    (require 'clojure.tools.namespace.repl)
+    (def re clojure.tools.namespace.repl/refresh)))
 
 (def gridWidth 30)
 (def gridHeight 20)
@@ -18,9 +21,20 @@
 
 (defrecord Game [direction prev-dir snake fruit progress])
 (defn newFruit [game]
-  (assoc game
-    :fruit {:x (rand-int gridWidth)
-            :y (rand-int gridHeight)}))
+  (let [snake (:snake game)
+        in-snake (fn [node] (some #{node} snake))]
+    (assoc game :fruit
+           ; make sure snake not full, otherwise infinite loop
+           (if (< (count (:snake game))
+                  (* gridWidth gridHeight))
+             ; make one randomly until not in snake
+             ; efficiency even at worse case is
+             ; comparable to exhaustive iteration
+             (->> (fn [] {:x (rand-int gridWidth)
+                          :y (rand-int gridHeight)})
+                  (repeatedly)
+                  (drop-while in-snake)
+                  (first))))))
 (defn newGame []
   (newFruit
     (Game. :right :right
@@ -35,7 +49,7 @@
 
 (defn game-over [game]
   (let [head (new-head (first (:snake game))
-                       (:direction game)) ]
+                       (:direction game))]
     (not (and
            ; border inbound
            (<= 0 (:x head))
@@ -82,24 +96,24 @@
 
 (defn paintGame [game]
   (fn [c g]
-  (draw g (rect border border gameWidth gameHeight)
-        (style :foreground :white))
-  (doseq [dot (:snake @game)]
-    (draw g (drawCircle dot)
-          (style :background :yellow)))
-  (draw g (drawCircle (:fruit @game))
-        (style :background :red))))
+    (draw g (rect border border gameWidth gameHeight)
+          (style :foreground :white))
+    (doseq [dot (:snake @game)]
+      (draw g (drawCircle dot)
+            (style :background :yellow)))
+    (draw g (drawCircle (:fruit @game))
+          (style :background :red))))
 
 (defn game-keys-handler [game]
   (fn [e] (swap! game
                  change-dir
-                   (case (java.awt.event.KeyEvent/getKeyText
-                           (.getKeyCode e))
-                     "Left" :left
-                     "Right" :right
-                     "Up" :up
-                     "Down" :down
-                     nil))))
+                 (case (java.awt.event.KeyEvent/getKeyText
+                         (.getKeyCode e))
+                   "Left" :left
+                   "Right" :right
+                   "Up" :up
+                   "Down" :down
+                   nil))))
 
 (defn gameGui [game]
   "create a gui for a game instance"
@@ -117,13 +131,15 @@
     ; return canvas for repaint access
     c))
 
+(def g (atom (newGame)))
+
 (defn -main
   [& args]
   (let [game (atom (newGame))
         c (gameGui game)
         game-end (chan)
         t (timer (fn [e]
-                   (swap! game tick)
+                   (time (swap! game tick))
                    (repaint! c)
                    (if (= :loss (:progress @game))
                      (>!! game-end 0)))
