@@ -47,7 +47,7 @@
     :left (update head :x dec)
     :right (update head :x inc)))
 
-(defn game-over [game]
+(defn game-over? [game]
   (let [head (new-head (first (:snake game))
                        (:direction game))]
     (not (and
@@ -58,16 +58,19 @@
            (< (:y head) gridHeight)
            ; not running back on itself
            (nil? (some #{head} (:snake game)))))))
+(defn check-game-progress [game]
+  (if (game-over? game) :loss
+    ; game won when snake fills entire board
+    (if (= (count (:snake game)) (* gridWidth gridHeight))
+      :win :started)))
 
 (defn tick [game]
   "One time tick in a game"
   (let [head (new-head (first (:snake game))
                        (:direction game))
         eaten (= head (:fruit game))]
-    ; game over if head meets body
-    (-> (assoc game :progress
-               (if (game-over game)
-                 :loss :started))
+    ; check game over
+    (-> (assoc game :progress (check-game-progress game))
         ; put head on
         (update :snake conj head)
         ; take one off tail unless eat fruit
@@ -102,7 +105,18 @@
       (draw g (drawCircle dot)
             (style :background :yellow)))
     (draw g (drawCircle (:fruit @game))
-          (style :background :red))))
+          (style :background :red))
+    (case (:progress @game)
+      :loss (push g
+                  (.setColor g java.awt.Color/RED)
+                  (.drawString g "GAME OVER"
+                               (* 2 border) (* 2 border)))
+      :win (push g
+                  (.setColor g java.awt.Color/GREEN)
+                  (.drawString g "YOU WON"
+                               (* 2 border) (* 2 border)))
+      :started nil
+      )))
 
 (defn game-keys-handler [game]
   (fn [e] (swap! game
@@ -139,7 +153,7 @@
         c (gameGui game)
         game-end (chan)
         t (timer (fn [e]
-                   (time (swap! game tick))
+                   (swap! game tick)
                    (repaint! c)
                    (if (= :loss (:progress @game))
                      (>!! game-end 0)))
