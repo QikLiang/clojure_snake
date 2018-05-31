@@ -152,12 +152,22 @@
   (let [game (atom (newGame))
         c (gameGui game)
         game-end (chan)
+        last-time (atom (System/nanoTime))
         t (timer (fn [e]
+                   ; manually ensure delay is 300 ms
+                   (let [now (System/nanoTime)]
+                     (if (< now (+ @last-time 300000))
+                       (Thread/sleep
+                         (- 300
+                            (/ (- now @last-time) 1000))))
+                     (reset! last-time now))
+                   ; game loop and render
                    (swap! game tick)
                    (repaint! c)
                    (if (= :loss (:progress @game))
-                     (>!! game-end 0)))
-                 :delay 300)]
+                     (>!! game-end 0))
+                   )
+                 :delay 250)]
     (go
       (<! game-end)
       (println "game ended")
