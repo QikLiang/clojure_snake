@@ -14,7 +14,7 @@
 
 (def gridWidth 30)
 (def gridHeight 20)
-(def radius 15)
+(def radius 40)
 (def border 20)
 (def gameWidth (* gridWidth radius))
 (def gameHeight (* gridHeight radius))
@@ -27,7 +27,7 @@
         in-snake (fn [node] (some #{node} snake))]
     (assoc game :fruit
            ; make sure snake not full, otherwise infinite loop
-           (if (< (count (:snake game))
+           (if (< (.size (:snake game))
                   (* gridWidth gridHeight))
              ; make one randomly until not in snake
              ; efficiency even at worse case is
@@ -40,7 +40,9 @@
 (defn newGame []
   (newFruit
     (Game. :right :right
-           (list (Point. 1 0) (Point. 0 0)) 0 :started)))
+           (doto (new java.util.LinkedList)
+             (.add (Point. 1 0)) (.add (Point. 0 0)))
+           0 :started)))
 
 (defn new-head [head direction]
   (case direction
@@ -50,7 +52,7 @@
     :right (update head :x inc)))
 
 (defn game-over? [game]
-  (let [head (new-head (first (:snake game))
+  (let [head (new-head (.peek (:snake game))
                        (:direction game))]
     (not (and
            ; border inbound
@@ -63,20 +65,20 @@
 (defn check-game-progress [game]
   (if (game-over? game) :loss
     ; game won when snake fills entire board
-    (if (= (count (:snake game)) (* gridWidth gridHeight))
+    (if (= (.size (:snake game)) (* gridWidth gridHeight))
       :win :started)))
 
 (defn tick [game]
   "One time tick in a game"
-  (let [head (new-head (first (:snake game))
+  (let [head (new-head (.peek (:snake game))
                        (:direction game))
         eaten (= head (:fruit game))]
     ; check game over
     (-> (assoc game :progress (check-game-progress game))
         ; put head on
-        (update :snake conj head)
+        (update :snake #(doto % (.push head)))
         ; take one off tail unless eat fruit
-        (update :snake (if eaten identity drop-last))
+        (update :snake (if eaten identity #(doto % (.pollLast))))
         ; make new fruit if old one eaten
         ((if eaten newFruit identity))
         (assoc :prev-dir (:direction game))
