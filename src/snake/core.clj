@@ -19,6 +19,8 @@
 (def gameWidth (* gridWidth radius))
 (def gameHeight (* gridHeight radius))
 
+(defrecord Point [x y])
+
 (defrecord Game [direction prev-dir snake fruit progress])
 (defn newFruit [game]
   (let [snake (:snake game)
@@ -30,15 +32,15 @@
              ; make one randomly until not in snake
              ; efficiency even at worse case is
              ; comparable to exhaustive iteration
-             (->> (fn [] {:x (rand-int gridWidth)
-                          :y (rand-int gridHeight)})
+             (->> (fn [] (Point. (rand-int gridWidth)
+                          (rand-int gridHeight)))
                   (repeatedly)
                   (drop-while in-snake)
                   (first))))))
 (defn newGame []
   (newFruit
     (Game. :right :right
-           '({:x 1 :y 0} {:x 0 :y 0}) 0 :started)))
+           (list (Point. 1 0) (Point. 0 0)) 0 :started)))
 
 (defn new-head [head direction]
   (case direction
